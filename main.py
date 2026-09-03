@@ -7,7 +7,7 @@ import smtplib
 import requests
 import numpy as np
 import pytz
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.message import EmailMessage
 from PIL import Image as PILImage
 from ultralytics import YOLO
