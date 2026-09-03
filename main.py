@@ -7,23 +7,23 @@ import smtplib
 import requests
 import numpy as np
 import pytz
-from datetime import datetime, timedelta
+from datetime import datetime
 from email.message import EmailMessage
 from PIL import Image as PILImage
 from ultralytics import YOLO
 from playwright.sync_api import sync_playwright
 
 # ============================================================
-# CONFIGURATION & SECRETS
+# CONFIGURATION & SECRETS FROM GITHUB SECRETS
 # ============================================================
 ZENPUT_API_KEY = os.environ.get('ZENPUT_API_KEY')
 GMAIL_APP_PASS = os.environ.get('GMAIL_APP_PASSWORD')
 SENDER_EMAIL   = "aof.group.auto@gmail.com"
 
-MODEL_PATH     = "best.pt"  # Make sure best.pt is in repo root
+MODEL_PATH     = "best.pt"  # Place best.pt in repo root
 
 TZ    = pytz.timezone("Asia/Baghdad")
-TODAY =  (datetime.now(TZ) - timedelta(days=1)).strftime("%Y-%m-%d")
+TODAY = datetime.now(TZ).strftime("%Y-%m-%d")
 
 TEMPLATES = {
     "Shawarma Classic": 401648,
@@ -69,18 +69,22 @@ def get_signed_url(s3_path):
         pass
     return ""
 
-def download_image(url):
+def download_image(url, max_dim=500):
+    """Downloads and resizes image to max 500px to keep file size small."""
     try:
         resp = requests.get(url, timeout=15)
         if resp.status_code == 200:
-            return PILImage.open(io.BytesIO(resp.content)).convert("RGB")
+            img = PILImage.open(io.BytesIO(resp.content)).convert("RGB")
+            img.thumbnail((max_dim, max_dim), PILImage.LANCZOS)
+            return img
     except Exception:
         pass
     return None
 
 def image_to_base64(pil_img):
+    """Compresses Base64 JPEG to quality 65 for email size safety."""
     buffered = io.BytesIO()
-    pil_img.save(buffered, format="JPEG", quality=80)
+    pil_img.save(buffered, format="JPEG", quality=65)
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
 def convert_html_to_pdf(html_path, pdf_path):
@@ -114,9 +118,8 @@ def fetch_today_photos():
             if not date_local.startswith(TODAY):
                 continue
                 
-            location  = meta.get("location", {}).get("name", "Unknown Branch")
+            location = meta.get("location", {}).get("name", "Unknown Branch")
             
-            # EXCLUDED BRANCH CHECK
             if is_excluded_branch(location):
                 print(f"  ⏭️ Skipping excluded branch: {location}")
                 continue
@@ -147,7 +150,6 @@ def main():
         print(f"⚠️ No submissions found for today ({TODAY}). Exiting.")
         return
 
-    # Categorize by Brand
     brand_cards = {
         "Shawarma Classic": {"wrong": [], "right": []},
         "Lubda":            {"wrong": [], "right": []},
@@ -158,10 +160,9 @@ def main():
 
     for idx, rec in enumerate(records, 1):
         print(f"[{idx}/{len(records)}] Processing {rec['branch']} ({rec['brand']})...")
-        pil_img = download_image(rec["url"])
+        pil_img = download_image(rec["url"], max_dim=500)
         if pil_img is None: continue
         
-        # Conf=0.38 and IOU=0.40 eliminates false clamps and merges duplicates
         results = model(pil_img, conf=0.38, iou=0.40, verbose=False)[0]
         cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
         
@@ -183,14 +184,13 @@ def main():
                 box_color = (0, 0, 255) # Red for Closed
                 label_text = "Closed"
                 
-            cv2.rectangle(cv_img, (x1, y1), (x2, y2), box_color, 3)
-            cv2.putText(cv_img, label_text, (x1, max(y1 - 10, 20)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, box_color, 2)
+            cv2.rectangle(cv_img, (x1, y1), (x2, y2), box_color, 2)
+            cv2.putText(cv_img, label_text, (x1, max(y1 - 10, 15)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, box_color, 2)
         
         drawn_pil = PILImage.fromarray(cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB))
         img_b64 = image_to_base64(drawn_pil)
         
-        # QC Rules
         if closed_count > 0:
             badge_text = f"❌ WRONG ({closed_count} Closed Valve Detected)"
             badge_color = "#e74c3c"
@@ -208,7 +208,7 @@ def main():
             is_wrong = True
             
         card = f"""
-        <div style="border: 3px solid {border_color}; border-radius: 10px; padding: 12px; width: 330px; background: #ffffff; box-shadow: 0 4px 6px rgba(0,0,0,0.1); page-break-inside: avoid;">
+        <div style="border: 3px solid {border_color}; border-radius: 10px; padding: 12px; width: 320px; background: #ffffff; box-shadow: 0 4px 6px rgba(0,0,0,0.1); page-break-inside: avoid;">
             <div style="background: #0f172a; border-radius: 6px; height: 260px; display: flex; align-items: center; justify-content: center;">
                 <img src="data:image/jpeg;base64,{img_b64}" style="max-width: 100%; max-height: 260px; object-fit: contain; border-radius: 6px;">
             </div>
@@ -230,7 +230,7 @@ def main():
             else:
                 brand_cards[b]["right"].append(card)
 
-    # BUILD SECTIONS BY BRAND (Wrong cards first inside each section)
+    # BUILD SECTIONS BY BRAND
     sections_html = []
     for brand_name, cards in brand_cards.items():
         all_brand_cards = cards["wrong"] + cards["right"]
@@ -239,7 +239,7 @@ def main():
             
         ar_title = BRAND_AR.get(brand_name, brand_name)
         sec = f"""
-        <div style="margin-top: 30px; margin-bottom: 30px;">
+        <div style="margin-top: 25px; margin-bottom: 25px;">
             <h2 style="color: #1a3c5e; border-bottom: 2px solid #1a3c5e; padding-bottom: 8px;">{ar_title} ({len(all_brand_cards)} فرع)</h2>
             <div style="display: flex; flex-wrap: wrap; gap: 16px; direction: ltr;">
                 {"".join(all_brand_cards)}
@@ -248,7 +248,6 @@ def main():
         """
         sections_html.append(sec)
 
-    # Build Full HTML Document
     html_report = f"""
     <!DOCTYPE html>
     <html>
@@ -270,29 +269,34 @@ def main():
     html_filename = f"GasBox_AI_Report_{TODAY}.html"
     pdf_filename  = f"GasBox_AI_Report_{TODAY}.pdf"
 
-    # Save HTML File
     with open(html_filename, "w", encoding="utf-8") as f:
         f.write(html_report)
 
     # Convert HTML to PDF
     convert_html_to_pdf(html_filename, pdf_filename)
 
-    # SEND EMAIL WITH BOTH ATTACHMENTS
-    print("📧 Sending Email Report with HTML and PDF attachments...")
+    # SEND EMAIL (PDF ATTACHMENT ONLY)
+    print("📧 Sending Email Report with PDF attachment...")
     msg = EmailMessage()
     msg["Subject"] = f"📦 تقرير فحص صندوق الغاز الذكي (AI) - {TODAY}"
     msg["From"]    = f"Business Intelligence <{SENDER_EMAIL}>"
     msg["To"]      = ", ".join(RECIPIENTS_TO)
     msg["Cc"]      = ", ".join(RECIPIENTS_CC)
     
-    # HTML Body in email
-    msg.add_alternative(html_report, subtype="html")
+    summary_html = f"""
+    <div dir="rtl" style="font-family: Arial, sans-serif; line-height: 1.6;">
+        <h3>السادة/ الإدارة،</h3>
+        <p>مرفق <b>تقرير فحص صندوق الغاز الذكي (AI)</b> ليوم اليوم <b>{TODAY}</b> بصيغة PDF.</p>
+        <ul>
+            <li>إجمالي الفروع المفحوصة: <b>{len(records)}</b></li>
+            <li>المخالفات / الصور غير المكتملة: <b style="color: red;">{total_wrong}</b></li>
+        </ul>
+        <p>ملاحظة: تفاصيل الفروع والصور موضحة بالتفصيل في ملف PDF المرفق.</p>
+    </div>
+    """
+    msg.add_alternative(summary_html, subtype="html")
 
-    # Attach HTML File
-    with open(html_filename, "rb") as f:
-        msg.add_attachment(f.read(), maintype="text", subtype="html", filename=html_filename)
-
-    # Attach PDF File
+    # ATTACH PDF FILE ONLY
     with open(pdf_filename, "rb") as f:
         msg.add_attachment(f.read(), maintype="application", subtype="pdf", filename=pdf_filename)
 
@@ -300,7 +304,7 @@ def main():
         smtp.login(SENDER_EMAIL, GMAIL_APP_PASS)
         smtp.send_message(msg)
 
-    print("🎉 Email Sent Successfully with both HTML and PDF!")
+    print("🎉 Email Sent Successfully with PDF Attachment!")
 
 if __name__ == "__main__":
     main()
