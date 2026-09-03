@@ -43,7 +43,7 @@ BRAND_AR = {
 EXCLUDED_BRANCH_CODES = {"B22", "B28", "B33", "B30", "QB04", "QB05", "QB07"}
 
 RECIPIENTS_TO = [
-    "a.alsalem@aofgroup.com"
+    "o.salahaddin@aofgroup.com"
 ]
 RECIPIENTS_CC = [
     "o.salahaddin@aofgroup.com"
