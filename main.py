@@ -23,7 +23,7 @@ SENDER_EMAIL   = "aof.group.auto@gmail.com"
 MODEL_PATH     = "best.pt"  # Make sure best.pt is in repo root
 
 TZ    = pytz.timezone("Asia/Baghdad")
-TODAY = datetime.now(TZ).strftime("%Y-%m-%d")
+TODAY =  (datetime.now(TZ) - timedelta(days=1)).strftime("%Y-%m-%d")
 
 TEMPLATES = {
     "Shawarma Classic": 401648,
@@ -32,22 +32,18 @@ TEMPLATES = {
 }
 
 BRAND_AR = {
-    "Shawarma Classic": "شاورما كلاسيك 🌯",
-    "Lubda":            "لبدة 🥩",
-    "Garatis":          "قراطيس 🥙",
+    "Shawarma Classic": "شاورما كلاسيك ",
+    "Lubda":            "لبدة ",
+    "Garatis":          "قراطيس ",
 }
 
 EXCLUDED_BRANCH_CODES = {"B22", "B28", "B33", "B30", "QB04", "QB05", "QB07"}
 
 RECIPIENTS_TO = [
-    "w.alhanani@aofgroup.com","m.alsaghir@aofgroup.com","n.joshe@aofgroup.com","a.banafe@aofgroup.com",
-    "i.mostafa@aofgroup.com","m.alghazali@aofgroup.com","s.poudel@aofgroup.com","m.emad@aofgroup.com",
-    "a.suliman@aofgroup.com","a.alarabi@aofgroup.com","s.mansuri@aofgroup.com","m.suhail@aofgroup.com","a.alghanimi@lubdasa.com"
+    "a.alsalem@aofgroup.com"
 ]
 RECIPIENTS_CC = [
-    "o.salahaddin@aofgroup.com","a.alsalem@aofgroup.com","m.hejazi@aofgroup.com",
-    "omar@aofgroup.com","m.alhuaydar@aofgroup.com",
-    "a.omara@aofgroup.com","s.alharbi@aofgroup.com",
+    "o.salahaddin@aofgroup.com"
 ]
 
 # ============================================================
