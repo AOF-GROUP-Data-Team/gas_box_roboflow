@@ -2,9 +2,21 @@ name: Daily Gas Box AI Inspection
 
 on:
   schedule:
-    # Runs automatically every day at 18:00 UTC (9:00 PM Baghdad time)
+    # 12:00 UTC = 3:00 PM Baghdad Time (Admin Preview)
     - cron: '0 12 * * *'
-  workflow_dispatch: # Allows manual trigger anytime from GitHub Actions tab
+    # 13:00 UTC = 4:00 PM Baghdad Time (Final Dispatch)
+    - cron: '0 13 * * *'
+
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Select Run Mode'
+        required: true
+        default: 'final'
+        type: choice
+        options:
+          - 'preview'
+          - 'final'
 
 jobs:
   run-inspection:
@@ -25,10 +37,22 @@ jobs:
           playwright install chromium
           playwright install-deps chromium
 
-      - name: Run AI Inspection & Send Email
+      # RUN ADMIN PREVIEW (3:00 PM Schedule OR Manual 'preview' Selection)
+      - name: Run Admin Preview Mode
+        if: github.event.schedule == '0 12 * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'preview')
         env:
           ZENPUT_API_KEY: ${{ secrets.ZENPUT_API_KEY }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          PREVIEW_MODE: 'true'
+        run: python main.py
+
+      # RUN FINAL DISPATCH (4:00 PM Schedule OR Manual 'final' Selection)
+      - name: Run Final Dispatch Mode
+        if: github.event.schedule == '0 13 * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'final')
+        env:
+          ZENPUT_API_KEY: ${{ secrets.ZENPUT_API_KEY }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          PREVIEW_MODE: 'false'
         run: python main.py
 
       - name: Upload Report Artifacts
