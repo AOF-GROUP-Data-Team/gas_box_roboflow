@@ -163,7 +163,7 @@ def main():
         pil_img = download_image(rec["url"], max_dim=500)
         if pil_img is None: continue
         
-        results = model(pil_img, conf=0.55, iou=0.60, verbose=False)[0]
+        results = model(pil_img, conf=0.20, iou=0.10, verbose=False)[0]
         cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
         
         open_count = 0
