@@ -1,0 +1,40 @@
+name: Daily Gas Box AI Inspection
+
+on:
+  schedule:
+    # Runs automatically every day at 18:00 UTC (9:00 PM Baghdad time)
+    - cron: '0 12 * * *'
+  workflow_dispatch: # Allows manual trigger anytime from GitHub Actions tab
+
+jobs:
+  run-inspection:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies & Playwright
+        run: |
+          pip install requests pytz pillow ultralytics torch torchvision opencv-python-headless playwright
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Run AI Inspection & Send Email
+        env:
+          ZENPUT_API_KEY: ${{ secrets.ZENPUT_API_KEY }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        run: python main.py
+
+      - name: Upload Report Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: GasBox_Report_Today
+          path: |
+            *.html
+            *.pdf
