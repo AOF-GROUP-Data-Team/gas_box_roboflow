@@ -40,7 +40,7 @@ BRAND_AR = {
 EXCLUDED_BRANCH_CODES = {"B22", "B28", "B33", "B30", "QB04", "QB05", "QB07"}
 
 RECIPIENTS_TO = [
-    "a.alsalem@aofgroup.com"
+    "o.salahaddin@aofgroup.com"
 ]
 RECIPIENTS_CC = [
     "o.salahaddin@aofgroup.com"
@@ -257,7 +257,7 @@ def main():
     </head>
     <body style="font-family: Arial, sans-serif; background-color: #f8f9fa; padding: 20px;" dir="rtl">
         <div style="background: #1a3c5e; color: white; padding: 18px; border-radius: 8px; margin-bottom: 20px;">
-            <h1 style="margin: 0; font-size: 22px;">📦 تقرير فحص صندوق الغاز الذكي (AI) — {TODAY}</h1>
+            <h1 style="margin: 0; font-size: 22px;">📦 تقرير فحص صندوق الغاز  (AI) — {TODAY}</h1>
             <p style="margin: 5px 0 0 0; font-size: 14px;">إجمالي الفروع المفحوصة: <b>{len(records)}</b> | المخالفة/غير المكتملة: <b style="color: #ff8a80;">{total_wrong}</b></p>
         </div>
         
@@ -278,7 +278,7 @@ def main():
     # SEND EMAIL (PDF ATTACHMENT ONLY)
     print("📧 Sending Email Report with PDF attachment...")
     msg = EmailMessage()
-    msg["Subject"] = f"📦 تقرير فحص صندوق الغاز الذكي (AI) - {TODAY}"
+    msg["Subject"] = f"📦 تقرير فحص صندوق الغاز   - {TODAY}"
     msg["From"]    = f"Business Intelligence <{SENDER_EMAIL}>"
     msg["To"]      = ", ".join(RECIPIENTS_TO)
     msg["Cc"]      = ", ".join(RECIPIENTS_CC)
