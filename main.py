@@ -14,13 +14,16 @@ from ultralytics import YOLO
 from playwright.sync_api import sync_playwright
 
 # ============================================================
-# CONFIGURATION & SECRETS FROM GITHUB SECRETS
+# CONFIGURATION & SECRETS
 # ============================================================
 ZENPUT_API_KEY = os.environ.get('ZENPUT_API_KEY')
 GMAIL_APP_PASS = os.environ.get('GMAIL_APP_PASSWORD')
-SENDER_EMAIL   = "aof.group.auto@gmail.com"
+PREVIEW_MODE   = os.environ.get('PREVIEW_MODE', 'false').lower() == 'true'
 
-MODEL_PATH     = "best.pt"  # Place best.pt in repo root
+SENDER_EMAIL   = "aof.group.auto@gmail.com"
+ADMIN_EMAIL    = "o.salahaddin@aofgroup.com"  # <-- Admin email for 8 PM Preview
+
+MODEL_PATH     = "best.pt"
 
 TZ    = pytz.timezone("Asia/Baghdad")
 TODAY = datetime.now(TZ).strftime("%Y-%m-%d")
@@ -40,7 +43,7 @@ BRAND_AR = {
 EXCLUDED_BRANCH_CODES = {"B22", "B28", "B33", "B30", "QB04", "QB05", "QB07"}
 
 RECIPIENTS_TO = [
-    "o.salahaddin@aofgroup.com"
+    "a.alsalem@aofgroup.com"
 ]
 RECIPIENTS_CC = [
     "o.salahaddin@aofgroup.com"
@@ -49,9 +52,17 @@ RECIPIENTS_CC = [
 # ============================================================
 # HELPERS
 # ============================================================
+def load_manual_overrides():
+    """Reads manual branch overrides from overrides.txt."""
+    override_file = "overrides.txt"
+    if not os.path.exists(override_file):
+        return set()
+    with open(override_file, "r", encoding="utf-8") as f:
+        lines = [line.strip().upper() for line in f if line.strip() and not line.startswith("#")]
+    return set(lines)
+
 def is_excluded_branch(branch_raw: str) -> bool:
-    if not branch_raw:
-        return False
+    if not branch_raw: return False
     tokens = [t for t in re.split(r"[^A-Za-z0-9]+", str(branch_raw).upper()) if t]
     return any(t in EXCLUDED_BRANCH_CODES for t in tokens)
 
@@ -70,7 +81,6 @@ def get_signed_url(s3_path):
     return ""
 
 def download_image(url, max_dim=500):
-    """Downloads and resizes image to max 500px to keep file size small."""
     try:
         resp = requests.get(url, timeout=15)
         if resp.status_code == 200:
@@ -82,13 +92,11 @@ def download_image(url, max_dim=500):
     return None
 
 def image_to_base64(pil_img):
-    """Compresses Base64 JPEG to quality 65 for email size safety."""
     buffered = io.BytesIO()
     pil_img.save(buffered, format="JPEG", quality=65)
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
 def convert_html_to_pdf(html_path, pdf_path):
-    """Converts HTML file to A4 PDF using Playwright Chromium."""
     print(f"📄 Converting {html_path} to PDF...")
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -115,9 +123,7 @@ def fetch_today_photos():
             meta = sub.get("smetadata", {}) or {}
             date_local = meta.get("date_submitted_local", "")[:10]
             
-            if not date_local.startswith(TODAY):
-                continue
-                
+            if not date_local.startswith(TODAY): continue
             location = meta.get("location", {}).get("name", "Unknown Branch")
             
             if is_excluded_branch(location):
@@ -145,6 +151,10 @@ def main():
     print(f"🤖 Loading Object Detector from {MODEL_PATH}...")
     model = YOLO(MODEL_PATH)
     
+    manual_overrides = load_manual_overrides()
+    if manual_overrides:
+        print(f"🛠️ Active Manual Overrides loaded for: {manual_overrides}")
+
     records = fetch_today_photos()
     if not records:
         print(f"⚠️ No submissions found for today ({TODAY}). Exiting.")
@@ -163,7 +173,7 @@ def main():
         pil_img = download_image(rec["url"], max_dim=500)
         if pil_img is None: continue
         
-        results = model(pil_img, conf=0.20, iou=0.50, verbose=False)[0]
+        results = model(pil_img, conf=0.28, iou=0.50, verbose=False)[0]
         cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
         
         open_count = 0
@@ -174,14 +184,13 @@ def main():
             cls_id = int(box.cls[0])
             label_name = str(model.names[cls_id]).lower()
             
-            # Swapped label mapping: 'valve_closed' in Roboflow = OPEN (Green)
             if "closed" in label_name:
                 open_count += 1
-                box_color = (0, 255, 0) # Green for Open
+                box_color = (0, 255, 0)
                 label_text = "Open"
             else:
                 closed_count += 1
-                box_color = (0, 0, 255) # Red for Closed
+                box_color = (0, 0, 255)
                 label_text = "Closed"
                 
             cv2.rectangle(cv_img, (x1, y1), (x2, y2), box_color, 2)
@@ -191,7 +200,16 @@ def main():
         drawn_pil = PILImage.fromarray(cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB))
         img_b64 = image_to_base64(drawn_pil)
         
-        if closed_count > 0:
+        # Check Manual Override
+        branch_tokens = [t.upper() for t in re.split(r"[^A-Za-z0-9]+", rec['branch']) if t]
+        is_manually_approved = any(token in manual_overrides for token in branch_tokens) or rec['branch'].upper() in manual_overrides
+
+        if is_manually_approved:
+            badge_text = "✅ RIGHT (Manually Approved)"
+            badge_color = "#27ae60"
+            border_color = "#27ae60"
+            is_wrong = False
+        elif closed_count > 0:
             badge_text = f"❌ WRONG ({closed_count} Closed Valve Detected)"
             badge_color = "#e74c3c"
             border_color = "#e74c3c"
@@ -230,13 +248,10 @@ def main():
             else:
                 brand_cards[b]["right"].append(card)
 
-    # BUILD SECTIONS BY BRAND
     sections_html = []
     for brand_name, cards in brand_cards.items():
         all_brand_cards = cards["wrong"] + cards["right"]
-        if not all_brand_cards:
-            continue
-            
+        if not all_brand_cards: continue
         ar_title = BRAND_AR.get(brand_name, brand_name)
         sec = f"""
         <div style="margin-top: 25px; margin-bottom: 25px;">
@@ -251,16 +266,12 @@ def main():
     html_report = f"""
     <!DOCTYPE html>
     <html>
-    <head>
-        <meta charset="utf-8">
-        <title>Gas Box AI Inspection Report - {TODAY}</title>
-    </head>
+    <head><meta charset="utf-8"><title>Gas Box AI Report - {TODAY}</title></head>
     <body style="font-family: Arial, sans-serif; background-color: #f8f9fa; padding: 20px;" dir="rtl">
         <div style="background: #1a3c5e; color: white; padding: 18px; border-radius: 8px; margin-bottom: 20px;">
-            <h1 style="margin: 0; font-size: 22px;">📦 تقرير فحص صندوق الغاز  (AI) — {TODAY}</h1>
+            <h1 style="margin: 0; font-size: 22px;">📦 تقرير فحص صندوق الغاز  — {TODAY}</h1>
             <p style="margin: 5px 0 0 0; font-size: 14px;">إجمالي الفروع المفحوصة: <b>{len(records)}</b> | المخالفة/غير المكتملة: <b style="color: #ff8a80;">{total_wrong}</b></p>
         </div>
-        
         {"".join(sections_html)}
     </body>
     </html>
@@ -272,31 +283,26 @@ def main():
     with open(html_filename, "w", encoding="utf-8") as f:
         f.write(html_report)
 
-    # Convert HTML to PDF
     convert_html_to_pdf(html_filename, pdf_filename)
 
-    # SEND EMAIL (PDF ATTACHMENT ONLY)
-    print("📧 Sending Email Report with PDF attachment...")
+    # EMAIL DISPATCH LOGIC
     msg = EmailMessage()
-    msg["Subject"] = f"📦 تقرير فحص صندوق الغاز   - {TODAY}"
-    msg["From"]    = f"Business Intelligence <{SENDER_EMAIL}>"
-    msg["To"]      = ", ".join(RECIPIENTS_TO)
-    msg["Cc"]      = ", ".join(RECIPIENTS_CC)
-    
-    summary_html = f"""
-    <div dir="rtl" style="font-family: Arial, sans-serif; line-height: 1.6;">
-        <h3>السادة/ الإدارة،</h3>
-        <p>مرفق <b>تقرير فحص صندوق الغاز الذكي (AI)</b> ليوم اليوم <b>{TODAY}</b> بصيغة PDF.</p>
-        <ul>
-            <li>إجمالي الفروع المفحوصة: <b>{len(records)}</b></li>
-            <li>المخالفات / الصور غير المكتملة: <b style="color: red;">{total_wrong}</b></li>
-        </ul>
-        <p>ملاحظة: تفاصيل الفروع والصور موضحة بالتفصيل في ملف PDF المرفق.</p>
-    </div>
-    """
-    msg.add_alternative(summary_html, subtype="html")
+    msg["From"] = f"Business Intelligence <{SENDER_EMAIL}>"
 
-    # ATTACH PDF FILE ONLY
+    if PREVIEW_MODE:
+        print("🔍 RUNNING IN ADMIN PREVIEW MODE (8:00 PM)...")
+        msg["Subject"] = f"🔍 [معاينة أدمن] تقرير فحص صندوق الغاز (AI) - {TODAY}"
+        msg["To"]      = ADMIN_EMAIL
+        summary_text  = f"<h3>🔍 معاينة الأدمن الخاصة (8:00 مساءً)</h3><p>مرفق التقرير المبدئي ليوم اليوم {TODAY}. إذا رغبت في اعتماد فرع معين، أضف كود الفرع في ملف overrides.txt في GitHub قبل الساعة 9:00 مساءً.</p>"
+    else:
+        print("📢 RUNNING IN FINAL DISPATCH MODE (9:00 PM)...")
+        msg["Subject"] = f"📦 تقرير فحص صندوق الغاز   - {TODAY}"
+        msg["To"]      = ", ".join(RECIPIENTS_TO)
+        msg["Cc"]      = ", ".join(RECIPIENTS_CC)
+        summary_text  = f"<h3>السادة/ الإدارة،</h3><p>مرفق <b>تقرير فحص صندوق الغاز الذكي (AI)</b> ليوم اليوم <b>{TODAY}</b> بصيغة PDF.</p><ul><li>إجمالي الفروع المفحوصة: <b>{len(records)}</b></li><li>المخالفات / الصور غير المكتملة: <b style="color: red;">{total_wrong}</b></li></ul>"
+
+    msg.add_alternative(summary_text, subtype="html")
+
     with open(pdf_filename, "rb") as f:
         msg.add_attachment(f.read(), maintype="application", subtype="pdf", filename=pdf_filename)
 
@@ -304,7 +310,7 @@ def main():
         smtp.login(SENDER_EMAIL, GMAIL_APP_PASS)
         smtp.send_message(msg)
 
-    print("🎉 Email Sent Successfully with PDF Attachment!")
+    print("🎉 Email Sent Successfully!")
 
 if __name__ == "__main__":
     main()
