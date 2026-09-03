@@ -14,14 +14,14 @@ from ultralytics import YOLO
 from playwright.sync_api import sync_playwright
 
 # ============================================================
-# CONFIGURATION & SECRETS
+# CONFIGURATION & SECRETS FROM GITHUB SECRETS
 # ============================================================
 ZENPUT_API_KEY = os.environ.get('ZENPUT_API_KEY')
 GMAIL_APP_PASS = os.environ.get('GMAIL_APP_PASSWORD')
 PREVIEW_MODE   = os.environ.get('PREVIEW_MODE', 'false').lower() == 'true'
 
 SENDER_EMAIL   = "aof.group.auto@gmail.com"
-ADMIN_EMAIL    = "o.salahaddin@aofgroup.com"  # <-- Admin email for 8 PM Preview
+ADMIN_EMAIL    = "o.salahaddin@aofgroup.com"  # Admin email for 3:00 PM Preview
 
 MODEL_PATH     = "best.pt"
 
@@ -43,7 +43,7 @@ BRAND_AR = {
 EXCLUDED_BRANCH_CODES = {"B22", "B28", "B33", "B30", "QB04", "QB05", "QB07"}
 
 RECIPIENTS_TO = [
-    "o.salahaddin@aofgroup.com"
+ "a.alsalem@aofgroup.com"
 ]
 RECIPIENTS_CC = [
     "o.salahaddin@aofgroup.com"
@@ -166,6 +166,7 @@ def main():
         "Garatis":          {"wrong": [], "right": []},
     }
 
+    flagged_branches_list = []
     total_wrong = 0
 
     for idx, rec in enumerate(records, 1):
@@ -173,7 +174,7 @@ def main():
         pil_img = download_image(rec["url"], max_dim=500)
         if pil_img is None: continue
         
-        results = model(pil_img, conf=0.28, iou=0.50, verbose=False)[0]
+        results = model(pil_img, conf=0.38, iou=0.40, verbose=False)[0]
         cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
         
         open_count = 0
@@ -214,6 +215,7 @@ def main():
             badge_color = "#e74c3c"
             border_color = "#e74c3c"
             is_wrong = True
+            flagged_branches_list.append(f"{rec['branch']} ({rec['brand']}) — {badge_text}")
         elif open_count >= 3:
             badge_text = f"✅ RIGHT ({open_count} Open Valves)"
             badge_color = "#27ae60"
@@ -224,16 +226,17 @@ def main():
             badge_color = "#e67e22"
             border_color = "#e67e22"
             is_wrong = True
+            flagged_branches_list.append(f"{rec['branch']} ({rec['brand']}) — {badge_text}")
             
         card = f"""
-        <div style="border: 3px solid {border_color}; border-radius: 10px; padding: 12px; width: 320px; background: #ffffff; box-shadow: 0 4px 6px rgba(0,0,0,0.1); page-break-inside: avoid;">
-            <div style="background: #0f172a; border-radius: 6px; height: 260px; display: flex; align-items: center; justify-content: center;">
-                <img src="data:image/jpeg;base64,{img_b64}" style="max-width: 100%; max-height: 260px; object-fit: contain; border-radius: 6px;">
+        <div style='border: 3px solid {border_color}; border-radius: 10px; padding: 12px; width: 320px; background: #ffffff; box-shadow: 0 4px 6px rgba(0,0,0,0.1); page-break-inside: avoid;'>
+            <div style='background: #0f172a; border-radius: 6px; height: 260px; display: flex; align-items: center; justify-content: center;'>
+                <img src='data:image/jpeg;base64,{img_b64}' style='max-width: 100%; max-height: 260px; object-fit: contain; border-radius: 6px;'>
             </div>
-            <div style="margin-top: 10px; font-family: Arial, sans-serif;">
-                <div style="font-size: 15px; font-weight: bold; color: #2c3e50;">{rec['branch']}</div>
-                <div style="font-size: 12px; color: #7f8c8d;">{rec['submitter']} | <b>{rec['date']}</b></div>
-                <div style="margin-top: 8px; padding: 6px 12px; background: {badge_color}; color: white; font-weight: bold; font-size: 13px; text-align: center; border-radius: 5px;">
+            <div style='margin-top: 10px; font-family: Arial, sans-serif;'>
+                <div style='font-size: 15px; font-weight: bold; color: #2c3e50;'>{rec['branch']}</div>
+                <div style='font-size: 12px; color: #7f8c8d;'>{rec['submitter']} | <b>{rec['date']}</b></div>
+                <div style='margin-top: 8px; padding: 6px 12px; background: {badge_color}; color: white; font-weight: bold; font-size: 13px; text-align: center; border-radius: 5px;'>
                     {badge_text}
                 </div>
             </div>
@@ -254,9 +257,9 @@ def main():
         if not all_brand_cards: continue
         ar_title = BRAND_AR.get(brand_name, brand_name)
         sec = f"""
-        <div style="margin-top: 25px; margin-bottom: 25px;">
-            <h2 style="color: #1a3c5e; border-bottom: 2px solid #1a3c5e; padding-bottom: 8px;">{ar_title} ({len(all_brand_cards)} فرع)</h2>
-            <div style="display: flex; flex-wrap: wrap; gap: 16px; direction: ltr;">
+        <div style='margin-top: 25px; margin-bottom: 25px;'>
+            <h2 style='color: #1a3c5e; border-bottom: 2px solid #1a3c5e; padding-bottom: 8px;'>{ar_title} ({len(all_brand_cards)} فرع)</h2>
+            <div style='display: flex; flex-wrap: wrap; gap: 16px; direction: ltr;'>
                 {"".join(all_brand_cards)}
             </div>
         </div>
@@ -266,11 +269,11 @@ def main():
     html_report = f"""
     <!DOCTYPE html>
     <html>
-    <head><meta charset="utf-8"><title>Gas Box AI Report - {TODAY}</title></head>
-    <body style="font-family: Arial, sans-serif; background-color: #f8f9fa; padding: 20px;" dir="rtl">
-        <div style="background: #1a3c5e; color: white; padding: 18px; border-radius: 8px; margin-bottom: 20px;">
-            <h1 style="margin: 0; font-size: 22px;">📦 تقرير فحص صندوق الغاز  — {TODAY}</h1>
-            <p style="margin: 5px 0 0 0; font-size: 14px;">إجمالي الفروع المفحوصة: <b>{len(records)}</b> | المخالفة/غير المكتملة: <b style="color: #ff8a80;">{total_wrong}</b></p>
+    <head><meta charset='utf-8'><title>Gas Box AI Report - {TODAY}</title></head>
+    <body style='font-family: Arial, sans-serif; background-color: #f8f9fa; padding: 20px;' dir='rtl'>
+        <div style='background: #1a3c5e; color: white; padding: 18px; border-radius: 8px; margin-bottom: 20px;'>
+            <h1 style='margin: 0; font-size: 22px;'>📦 تقرير فحص صندوق الغاز   — {TODAY}</h1>
+            <p style='margin: 5px 0 0 0; font-size: 14px;'>إجمالي الفروع المفحوصة: <b>{len(records)}</b> | المخالفة/غير المكتملة: <b style='color: #ff8a80;'>{total_wrong}</b></p>
         </div>
         {"".join(sections_html)}
     </body>
@@ -290,16 +293,37 @@ def main():
     msg["From"] = f"Business Intelligence <{SENDER_EMAIL}>"
 
     if PREVIEW_MODE:
-        print("🔍 RUNNING IN ADMIN PREVIEW MODE (8:00 PM)...")
+        print("🔍 RUNNING IN ADMIN PREVIEW MODE (3:00 PM)...")
         msg["Subject"] = f"🔍 [معاينة أدمن] تقرير فحص صندوق الغاز (AI) - {TODAY}"
         msg["To"]      = ADMIN_EMAIL
-        summary_text  = f"<h3>🔍 معاينة الأدمن الخاصة (8:00 مساءً)</h3><p>مرفق التقرير المبدئي ليوم اليوم {TODAY}. إذا رغبت في اعتماد فرع معين، أضف كود الفرع في ملف overrides.txt في GitHub قبل الساعة 9:00 مساءً.</p>"
+        
+        flagged_list_html = "".join([f"<li>{item}</li>" for item in flagged_branches_list]) if flagged_branches_list else "<li>لا توجد مخالفات مفحوصة اليوم 🎉</li>"
+
+        summary_text = f"""
+        <div dir='rtl' style='font-family: Arial, sans-serif; line-height: 1.6;'>
+            <h3 style='color: #1a3c5e;'>🔍 معاينة الأدمن الخاصة (الساعة 3:00 عصراً)</h3>
+            <p>مرفق التقرير المبدئي لفحص صندوق الغاز ليوم اليوم <b>{TODAY}</b> بصيغة PDF.</p>
+            
+            <p><b>الفروع المخالفة/غير المكتملة التي تم رصدها ({total_wrong} فرع):</b></p>
+            <ul>
+                {flagged_list_html}
+            </ul>
+
+            <div style='background: #fff3cd; border: 1px solid #ffeeba; padding: 12px; border-radius: 6px; margin-top: 15px;'>
+                <b>💡 كيفية الاعتماد اليدوي (Manual Override):</b><br>
+                إذا لاحظت أن أحد الفروع أعلاه سليم وترغب في اعتماده قبل إرسال التقرير النهائي (الساعة 4:00 عصراً):<br>
+                1. افتح مستودع GitHub.<br>
+                2. أضف كود الفرع (مثال: <code>LBRUH B07</code>) داخل ملف <b><code>overrides.txt</code></b>.<br>
+                3. سيقوم النظام تلقائياً باعتماده كـ <b>✅ RIGHT (Manually Approved)</b> في تقرير الساعة 4:00 عصراً!
+            </div>
+        </div>
+        """
     else:
-        print("📢 RUNNING IN FINAL DISPATCH MODE (9:00 PM)...")
+        print("📢 RUNNING IN FINAL DISPATCH MODE (4:00 PM)...")
         msg["Subject"] = f"📦 تقرير فحص صندوق الغاز   - {TODAY}"
         msg["To"]      = ", ".join(RECIPIENTS_TO)
         msg["Cc"]      = ", ".join(RECIPIENTS_CC)
-        summary_text  = f"<h3>السادة/ الإدارة،</h3><p>مرفق <b>تقرير فحص صندوق الغاز الذكي (AI)</b> ليوم اليوم <b>{TODAY}</b> بصيغة PDF.</p><ul><li>إجمالي الفروع المفحوصة: <b>{len(records)}</b></li><li>المخالفات / الصور غير المكتملة: <b style="color: red;">{total_wrong}</b></li></ul>"
+        summary_text  = f"<div dir='rtl' style='font-family: Arial, sans-serif; line-height: 1.6;'><h3>السادة/ الإدارة،</h3><p>مرفق <b>تقرير فحص صندوق الغاز الذكي (AI)</b> ليوم اليوم <b>{TODAY}</b> بصيغة PDF.</p><ul><li>إجمالي الفروع المفحوصة: <b>{len(records)}</b></li><li>المخالفات / الصور غير المكتملة: <b style='color: red;'>{total_wrong}</b></li></ul></div>"
 
     msg.add_alternative(summary_text, subtype="html")
 
