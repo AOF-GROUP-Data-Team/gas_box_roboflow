@@ -51,6 +51,13 @@ MAIL_REVIEWER = [
 
 TEMPLATES = {"Classic": 401648, "Lubda": 472189, "Garatis": 671643}
 
+# 0 = today (KSA), 1 = yesterday. Closing checklists are submitted late at night,
+# so a run before midnight sees today's; a run the next morning sees yesterday's.
+DAYS_BACK = 0
+
+# 24-hour branches that do not close the gas — reported separately, not scored.
+EXCLUDE_BRANCHES = {"B22", "B28", "B30", "B33", "QB04", "QB05", "QB07"}
+
 IMGSZ, CONF_FLOOR, CONF_OPEN = 1280, 0.30, 0.20
 EXPECTED_VALVES, IOU, AGNOSTIC = 3, 0.45, True
 TWO_PASS, CLAHE_CLIP, CONF_PASS2, MERGE_IOU = True, 3.0, 0.35, 0.40
@@ -175,12 +182,17 @@ def collect(day):
                         n += 1
                 break
         print(f"  {brand}: {n} gas box photos")
-    seen, uniq = set(), []
+    seen, uniq, excluded = set(), [], []
     for r in recs:
-        if r["s3_key"] not in seen:
-            seen.add(r["s3_key"]); uniq.append(r)
+        if r["s3_key"] in seen: continue
+        seen.add(r["s3_key"])
+        (excluded if r["branch"] in EXCLUDE_BRANCHES else uniq).append(r)
+    if excluded:
+        eb = sorted({r["branch"] for r in excluded})
+        print(f"  excluded {len(excluded)} photos from 24h branches: {', '.join(eb)}")
     # sort by s3_key so indices are stable between stage 1 and stage 2
-    return sorted(uniq, key=lambda r: r["s3_key"])
+    return sorted(uniq, key=lambda r: r["s3_key"]), sorted(
+        excluded, key=lambda r: (r["brand"], r["branch"]))
 
 
 def fingerprint(records):
@@ -504,13 +516,13 @@ def main():
     a = ap.parse_args()
 
     ksa = timezone(timedelta(hours=3))
-    day = a.date or (datetime.now(ksa) - timedelta(days=1)).strftime("%Y-%m-%d")
+    day = a.date or (datetime.now(ksa) - timedelta(days=DAYS_BACK)).strftime("%Y-%m-%d")
     print(f"stage={a.stage}  date={day}\n")
 
     shutil.rmtree(WORK, ignore_errors=True)
     for d in ("img", "enh", "out"): os.makedirs(f"{WORK}/{d}")
 
-    records = collect(day)
+    records, excluded = collect(day)
     if not records:
         print("no gas box photos for this date — nothing to do"); return
     fp = fingerprint(records)
@@ -554,6 +566,10 @@ def main():
              f"  {c.get('WRONG',0)} open valve detected",
              f"  {c.get('REVIEW',0)} model unsure — human check",
              f"  {c.get('UNUSABLE',0)} photo does not show the gas box", ""]
+    if excluded:
+        eb = sorted({r["branch"] for r in excluded})
+        lines += [f"Not scored ({len(excluded)} photos from 24-hour branches): "
+                  + ", ".join(eb), ""]
     if flagged:
         lines += ["Branches flagged:"] + \
                  [f"  {r['brand']} {r['branch']} — {r['branch_name'][:40]} ({r['user']})"
