@@ -1,0 +1,66 @@
+name: Gas box valve check
+
+on:
+  schedule:
+    # 06:00 KSA = 03:00 UTC, daily
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: "review = email the reviewer | send = email the recipients"
+        required: true
+        default: "send"
+        type: choice
+        options: [review, send]
+      corrections:
+        description: "Paste the corrections string from the review report (blank = send as-is)"
+        required: false
+        default: ""
+      date:
+        description: "Date to score, YYYY-MM-DD (blank = yesterday KSA)"
+        required: false
+        default: ""
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install -q --upgrade pip
+          # CPU-only torch — much smaller and faster to install than the CUDA build
+          pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install -q ultralytics pillow requests opencv-python-headless
+
+      - name: Run
+        env:
+          ZENPUT_TOKEN: ${{ secrets.ZENPUT_TOKEN }}
+          SMTP_USER:    ${{ secrets.SMTP_USER }}
+          SMTP_PASS:    ${{ secrets.SMTP_PASS }}
+          WEIGHTS: models/valve_v2_best.pt
+        run: |
+          STAGE="${{ github.event.inputs.stage }}"
+          if [ -z "$STAGE" ]; then STAGE="review"; fi   # scheduled runs -> review only
+          python gasbox_valve_check.py "$STAGE" \
+            --corrections "${{ github.event.inputs.corrections }}" \
+            --date "${{ github.event.inputs.date }}"
+
+      - name: Keep the report as an artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: valve-check-report
+          path: |
+            /tmp/gasbox/*.html
+            /tmp/gasbox/*.csv
+          retention-days: 14
+          if-no-files-found: ignore
