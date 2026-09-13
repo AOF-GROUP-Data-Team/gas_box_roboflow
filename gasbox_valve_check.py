@@ -46,7 +46,7 @@ MAIL_CC = [
 ]
 # who gets the review copy each morning (nobody else is emailed until you send)
 MAIL_REVIEWER = [
-    "o.salahaddin@aofgroup.com",
+    "a.alsalem@aofgroup.com",
 ]
 
 TEMPLATES = {"Classic": 401648, "Lubda": 472189, "Garatis": 671643}
@@ -68,6 +68,10 @@ PAGE_LIMIT, MAX_PAGES, STALE_PAGES, WORKERS = 50, 200, 3, 6
 BASE = "https://www.zenput.com"
 WORK = "/tmp/gasbox"
 VERDICTS = ["correct", "WRONG", "REVIEW", "UNUSABLE"]
+REASON = {"correct":  "all three closed",
+          "WRONG":    "open valve",
+          "REVIEW":   "needs a human check",
+          "UNUSABLE": "photo does not show the gas box"}
 # -----------------------------------------------------------------------------
 
 sess = requests.Session()
@@ -367,7 +371,7 @@ dialog img{max-width:96vw;max-height:96vh;border-radius:8px}
 dialog::backdrop{background:rgba(0,0,0,.85)}"""
 
     sub = (f"{day} · {len(rows)} photos · {len(set(r['branch'] for r in rows))} branches · "
-           f"{usable} usable" + (f" · {ncorr} corrected by hand" if ncorr else "")
+           f"{usable} usable"
            + (f" · {n_fail} download failures" if n_fail else ""))
 
     p = [f'<!doctype html><html lang="en"><head><meta charset="utf-8">'
@@ -401,8 +405,7 @@ dialog::backdrop{background:rgba(0,0,0,.85)}"""
                     f'class="{"sel" if v==r["verdict"] else ""}">{v.title()}</button>'
                     for v in VERDICTS)
                 fix = f'<div class="fix">{btns}</div>'
-            corr = (' <span style="color:#2F6FEB;font-weight:600">(corrected)</span>'
-                    if r["corrected"] else "")
+            corr = ""
             p.append(
                 f'<div class="card" id="c{r["idx"]}">'
                 f'<img src="data:image/jpeg;base64,{b64(r["img"])}" onclick="z(this.src)">'
@@ -467,6 +470,108 @@ paint();''')
     return "".join(p), c, usable
 
 
+def build_pdf(rows, day, path, excluded=None, n_fail=0):
+    """Plain A4 report: summary page, then two photo cards per page."""
+    from fpdf import FPDF
+
+    def T(x):
+        """Built-in PDF fonts are latin-1 only — fold the typographic chars."""
+        return (str(x).replace("\u2014", "-").replace("\u2013", "-")
+                      .replace("\u2018", "'").replace("\u2019", "'")
+                      .replace("\u201c", '"').replace("\u201d", '"')
+                      .replace("\u00b7", "|").replace("\u2265", ">=")
+                      .encode("latin-1", "replace").decode("latin-1"))
+
+    c = Counter(r["verdict"] for r in rows)
+    usable = len(rows) - c.get("UNUSABLE", 0)
+    RGB = {"WRONG": (226, 75, 74), "REVIEW": (217, 130, 43),
+           "UNUSABLE": (107, 107, 107), "correct": (29, 158, 117)}
+
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.set_auto_page_break(False)
+    L, W = 14, 182
+
+    # ---- summary ----
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_xy(L, 18); pdf.cell(W, 9, T("Gas box valve check"), ln=1)
+    pdf.set_font("Helvetica", "", 11); pdf.set_text_color(90, 90, 90)
+    pdf.set_x(L)
+    pdf.cell(W, 6, T(f"{day}   |   {len(rows)} photos   |   "
+                     f"{len(set(r['branch'] for r in rows))} branches"), ln=1)
+    pdf.set_text_color(0, 0, 0); pdf.ln(6)
+
+    for k, label, _ in SECTIONS:
+        pdf.set_x(L); pdf.set_fill_color(*RGB[k])
+        pdf.set_text_color(255, 255, 255); pdf.set_font("Helvetica", "B", 12)
+        pdf.cell(16, 9, T(f" {c.get(k,0)}"), fill=True)
+        pdf.set_text_color(30, 30, 30); pdf.set_font("Helvetica", "", 11)
+        pdf.cell(W - 16, 9, T(f"  {label}"), ln=1)
+        pdf.ln(1.5)
+
+    pdf.ln(4); pdf.set_font("Helvetica", "", 10); pdf.set_text_color(90, 90, 90)
+    pdf.set_x(L)
+    pdf.multi_cell(W, 5.5, T(f"{usable} of {len(rows)} photos actually show a gas box."))
+    if excluded:
+        eb = sorted({r["branch"] for r in excluded})
+        pdf.set_x(L)
+        pdf.multi_cell(W, 5.5, T(f"Not scored - 24-hour branches ({len(excluded)} photos): "
+                                 + ", ".join(eb)))
+    if n_fail:
+        pdf.set_x(L); pdf.multi_cell(W, 5.5, T(f"{n_fail} photos failed to download."))
+    pdf.set_text_color(0, 0, 0)
+
+    flagged = [r for r in rows if r["verdict"] == "WRONG"]
+    if flagged:
+        pdf.ln(6); pdf.set_x(L); pdf.set_font("Helvetica", "B", 12)
+        pdf.cell(W, 7, T("Branches flagged"), ln=1)
+        pdf.set_font("Helvetica", "", 10)
+        for r in flagged:
+            pdf.set_x(L + 4)
+            pdf.cell(W - 4, 6,
+                     T(f"{r['brand']}  {r['branch']}   {r['branch_name'][:38]}   "
+                       f"{r['user'][:26]}"), ln=1)
+
+    # ---- photo cards, 2 per page ----
+    CARD_H, IMG_H = 132, 96
+    for k, label, _ in SECTIONS:
+        grp = [r for r in rows if r["verdict"] == k]
+        if not grp: continue
+        pdf.add_page(); slot = 0
+        pdf.set_x(L); pdf.set_font("Helvetica", "B", 13)
+        pdf.set_text_color(*RGB[k]); pdf.cell(W, 9, T(f"{label}  ({len(grp)})"), ln=1)
+        pdf.set_text_color(0, 0, 0)
+        top0 = pdf.get_y() + 2
+
+        for r in grp:
+            if slot == 2:
+                pdf.add_page(); slot = 0; top0 = 16
+            y = top0 + slot * CARD_H
+            try:
+                iw, ih = Image.open(r["img"]).size
+                w = min(W, IMG_H * iw / ih)
+                pdf.image(r["img"], x=L, y=y, h=IMG_H)
+            except Exception:
+                w = 0
+            ty = y + IMG_H + 3
+            pdf.set_xy(L, ty); pdf.set_font("Helvetica", "B", 11)
+            pdf.set_text_color(*RGB[k])
+            pdf.cell(24, 5.5, T(k.upper()))
+            pdf.set_text_color(0, 0, 0)
+            pdf.cell(W - 24, 5.5, T(f"{r['brand']}  {r['branch']}"), ln=1)
+            pdf.set_x(L); pdf.set_font("Helvetica", "", 9)
+            pdf.set_text_color(95, 95, 95)
+            pdf.cell(W, 4.6, T(f"{r['branch_name'][:46]}   {r['user'][:30]}"), ln=1)
+            pdf.set_x(L)
+            pdf.cell(W, 4.6, T(f"{r['reason']}   |   {r['n_valves']} valves, "
+                               f"{r['n_open']} open   |   {r['detections'][:52]}"), ln=1)
+            pdf.set_text_color(0, 0, 0)
+            slot += 1
+
+    pdf.output(path)
+    return path
+
+
 def apply_corrections(rows, s):
     if not s or not s.strip(): return 0, None
     s = s.strip()
@@ -485,13 +590,14 @@ def apply_corrections(rows, s):
         if v not in VERDICTS: return n, f"unknown verdict '{v}'"
         if k not in idx: return n, f"index {k} not in this run"
         idx[k]["verdict"] = v
-        idx[k]["corrected"] = True
-        idx[k]["reason"] = "corrected by reviewer"
+        idx[k]["corrected"] = True          # internal only, never shown
+        idx[k]["reason"] = REASON[v]
         n += 1
     return n, None
 
 
-def send_mail(subject, body, to, cc, attach_name, attach_bytes):
+def send_mail(subject, body, to, cc, attach_name, attach_bytes,
+              maintype="text", subtype="html"):
     if not SMTP_PASS:
         print("!! SMTP_PASS not set — skipping send"); return
     m = EmailMessage()
@@ -500,7 +606,7 @@ def send_mail(subject, body, to, cc, attach_name, attach_bytes):
     if cc: m["Cc"] = ", ".join(cc)
     m["Subject"] = subject
     m.set_content(body)
-    m.add_attachment(attach_bytes, maintype="text", subtype="html",
+    m.add_attachment(attach_bytes, maintype=maintype, subtype=subtype,
                      filename=attach_name)
     with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as s:
         s.login(SMTP_USER, SMTP_PASS)
@@ -546,9 +652,10 @@ def main():
 
     review = a.stage == "review"
     doc, c, usable = build_html(rows, day, fp, review, len(fails))
-    out = f"{WORK}/valve_check_{day}.html"
-    open(out, "w", encoding="utf-8").write(doc)
-    print(f"report {os.path.getsize(out)/1e6:.1f} MB")
+    if review:
+        out = f"{WORK}/valve_check_{day}.html"
+        open(out, "w", encoding="utf-8").write(doc)
+        print(f"review html {os.path.getsize(out)/1e6:.1f} MB")
 
     csvp = f"{WORK}/valve_check_{day}.csv"
     with open(csvp, "w", newline="", encoding="utf-8-sig") as fh:
@@ -585,8 +692,13 @@ def main():
                   MAIL_REVIEWER or [SMTP_USER], [],
                   f"valve_check_{day}_REVIEW.html", doc.encode())
     else:
+        pdfp = f"{WORK}/valve_check_{day}.pdf"
+        build_pdf(rows, day, pdfp, excluded, len(fails))
+        print(f"pdf {os.path.getsize(pdfp)/1e6:.1f} MB")
+        lines[-1] = "The attached PDF has the annotated photos."
         send_mail(f"Gas box valve check — {day}", "\n".join(lines),
-                  MAIL_TO, MAIL_CC, f"valve_check_{day}.html", doc.encode())
+                  MAIL_TO, MAIL_CC, f"valve_check_{day}.pdf",
+                  open(pdfp, "rb").read(), "application", "pdf")
 
 
 if __name__ == "__main__":
