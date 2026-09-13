@@ -1,20 +1,5 @@
 #!/usr/bin/env python3
-"""
-Gas box valve check — two-stage pipeline for GitHub Actions.
 
-  python gasbox_valve_check.py review          # stage 1: score + email AA a review report
-  python gasbox_valve_check.py send            # stage 2: score + email recipients, no changes
-  python gasbox_valve_check.py send --corrections "f3a9:7=correct,19=unusable"
-
-Stage 2 deliberately re-runs the pull and inference instead of persisting state.
-Inference is deterministic, so the verdicts match; the only thing carried across
-is the corrections string. The fingerprint prefix guards against the photo set
-changing between review and send.
-
-Secrets expected in the environment:
-  ZENPUT_TOKEN, SMTP_USER, SMTP_PASS
-(recipient lists are plain config at the top of this file)
-"""
 
 import os, re, io, sys, csv, json, time, base64, html, shutil, hashlib
 import smtplib, argparse, unicodedata
@@ -46,7 +31,7 @@ MAIL_CC = [
 ]
 # who gets the review copy each morning (nobody else is emailed until you send)
 MAIL_REVIEWER = [
-    "a.alsalem@aofgroup.com",
+    "o.salahaddin@aofgroup.com",
 ]
 
 TEMPLATES = {"Classic": 401648, "Lubda": 472189, "Garatis": 671643}
