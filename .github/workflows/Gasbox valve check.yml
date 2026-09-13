@@ -3,7 +3,7 @@ name: Gas box valve check
 on:
   schedule:
     # 06:00 KSA = 03:00 UTC, daily
-    - cron: "0 3 * * *"
+    - cron: "0 11 * * *"
   workflow_dispatch:
     inputs:
       stage:
@@ -39,7 +39,7 @@ jobs:
           python -m pip install -q --upgrade pip
           # CPU-only torch — much smaller and faster to install than the CUDA build
           pip install -q torch torchvision --index-url https://download.pytorch.org/whl/cpu
-          pip install -q ultralytics pillow requests opencv-python-headless
+          pip install -q ultralytics pillow requests opencv-python-headless fpdf2
 
       - name: Run
         env:
