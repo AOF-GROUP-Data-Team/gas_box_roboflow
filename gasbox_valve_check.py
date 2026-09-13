@@ -46,7 +46,7 @@ MAIL_CC = [
 ]
 # who gets the review copy each morning (nobody else is emailed until you send)
 MAIL_REVIEWER = [
-    "a.alsalem@aofgroup.com",
+    "o.salahaddin@aofgroup.com",
 ]
 
 TEMPLATES = {"Classic": 401648, "Lubda": 472189, "Garatis": 671643}
