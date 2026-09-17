@@ -24,10 +24,15 @@ SENDER_NAME = "Business Intelligence"
 
 # --- recipients: edit these lists, add as many addresses as you like ----------
 MAIL_TO = [
-    "o.salahaddin@aofgroup.com",
+       "w.alhanani@aofgroup.com","m.alsaghir@aofgroup.com","n.joshe@aofgroup.com","a.banafe@aofgroup.com",
+    "i.mostafa@aofgroup.com","m.alghazali@aofgroup.com","s.poudel@aofgroup.com","m.emad@aofgroup.com",
+    "a.suliman@aofgroup.com","a.alarabi@aofgroup.com","s.mansuri@aofgroup.com","m.suhail@aofgroup.com","a.alghanimi@lubdasa.com"
 ]
+
 MAIL_CC = [
-    "a.alsalem@aofgroup.com",
+   "o.salahaddin@aofgroup.com","a.alsalem@aofgroup.com","m.hejazi@aofgroup.com",
+    "omar@aofgroup.com","m.alhuaydar@aofgroup.com",
+    "a.omara@aofgroup.com","s.alharbi@aofgroup.com",
 ]
 # who gets the review copy each morning (nobody else is emailed until you send)
 MAIL_REVIEWER = [
