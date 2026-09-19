@@ -2,16 +2,16 @@ name: Gas box valve check
 
 on:
   schedule:
-    # 06:00 KSA = 03:00 UTC, daily
-    - cron: "0 11 * * *"
+    # fallback only — real trigger is the external scheduler
+    - cron: "0 11 * * *"     # 14:00 KSA
   workflow_dispatch:
     inputs:
       stage:
-        description: "review = email the reviewer | send = email the recipients"
-        required: true
-        default: "send"
+        description: "auto/review = email the reviewer | send = email the recipients"
+        required: false
+        default: "auto"
         type: choice
-        options: [review, send]
+        options: [auto, review, send]
       corrections:
         description: "Paste the corrections string from the review report (blank = send as-is)"
         required: false
@@ -47,12 +47,19 @@ jobs:
           SMTP_USER:    ${{ secrets.SMTP_USER }}
           SMTP_PASS:    ${{ secrets.SMTP_PASS }}
           WEIGHTS: models/valve_v2_best.pt
+          IN_STAGE:       ${{ github.event.inputs.stage }}
+          IN_CORRECTIONS: ${{ github.event.inputs.corrections }}
+          IN_DATE:        ${{ github.event.inputs.date }}
         run: |
-          STAGE="${{ github.event.inputs.stage }}"
-          if [ -z "$STAGE" ]; then STAGE="review"; fi   # scheduled runs -> review only
+          set -euo pipefail
+          STAGE="${IN_STAGE:-}"
+          if [ -z "$STAGE" ] || [ "$STAGE" = "auto" ]; then
+            STAGE="review"                 # automated runs never send
+          fi
+          echo "stage=$STAGE"
           python gasbox_valve_check.py "$STAGE" \
-            --corrections "${{ github.event.inputs.corrections }}" \
-            --date "${{ github.event.inputs.date }}"
+            --corrections "${IN_CORRECTIONS:-}" \
+            --date "${IN_DATE:-}"
 
       - name: Keep the report as an artifact
         if: always()
