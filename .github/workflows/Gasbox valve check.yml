@@ -1,9 +1,6 @@
 name: Gas box valve check
 
 on:
-  schedule:
-    # fallback only — real trigger is the external scheduler
-    - cron: "0 11 * * *"     # 14:00 KSA
   workflow_dispatch:
     inputs:
       stage:
