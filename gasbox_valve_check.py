@@ -25,7 +25,7 @@ SENDER_NAME = "Business Intelligence"
 # --- recipients: edit these lists, add as many addresses as you like ----------
 MAIL_TO = [
        "w.alhanani@aofgroup.com","m.alsaghir@aofgroup.com","n.joshe@aofgroup.com","a.banafe@aofgroup.com",
-    "i.mostafa@aofgroup.com","m.alghazali@aofgroup.com","s.poudel@aofgroup.com","m.emad@aofgroup.com",
+    "i.mostafa@aofgroup.com","m.alghazali@aofgroup.com","n.alzahrani@aofgroup.com","s.poudel@aofgroup.com","m.emad@aofgroup.com",
     "a.suliman@aofgroup.com","a.alarabi@aofgroup.com","s.mansuri@aofgroup.com","m.suhail@aofgroup.com","a.alghanimi@lubdasa.com"
 ]
 
