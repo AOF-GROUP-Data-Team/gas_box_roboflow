@@ -48,6 +48,9 @@ DAYS_BACK = 0
 # 24-hour branches that do not close the gas — reported separately, not scored.
 EXCLUDE_BRANCHES = {"B22", "B28", "B30", "B33", "QB04", "QB05", "QB07"}
 
+# Branches dropped from the report entirely — not scored, not listed anywhere.
+REMOVE_BRANCHES = {"QB03"}
+
 IMGSZ, CONF_FLOOR, CONF_OPEN = 1280, 0.30, 0.20
 EXPECTED_VALVES, IOU, AGNOSTIC = 3, 0.45, True
 TWO_PASS, CLAHE_CLIP, CONF_PASS2, MERGE_IOU = True, 3.0, 0.35, 0.40
@@ -176,11 +179,15 @@ def collect(day):
                         n += 1
                 break
         print(f"  {brand}: {n} gas box photos")
-    seen, uniq, excluded = set(), [], []
+    seen, uniq, excluded, removed = set(), [], [], 0
     for r in recs:
         if r["s3_key"] in seen: continue
         seen.add(r["s3_key"])
+        if r["branch"] in REMOVE_BRANCHES:
+            removed += 1; continue
         (excluded if r["branch"] in EXCLUDE_BRANCHES else uniq).append(r)
+    if removed:
+        print(f"  removed {removed} photos from: {', '.join(sorted(REMOVE_BRANCHES))}")
     if excluded:
         eb = sorted({r["branch"] for r in excluded})
         print(f"  excluded {len(excluded)} photos from 24h branches: {', '.join(eb)}")
